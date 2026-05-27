@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PlantaOS — Manutenção</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── CSS Variables (dark theme, matching index.html) ── */
+:root{
+  --ink:#07100a; --c1:#0d1a0f; --c2:#111e13; --dp-bg:rgba(13,26,15,.7);
+  --bd:rgba(111,175,130,.14); --bd2:rgba(111,175,130,.30);
+  --t:#c8e4cc; --t2:#6ba872; --t3:#3a6040; --heading:#fff;
+  --verde:#6FAF82; --amb:#BA7517; --red:#C25A1A;
+  --gl:#6FAF82; --g:#1B3A21; --bar-bg:rgba(255,255,255,.07);
+  --input-bg:rgba(111,175,130,.06);
+  --top-bg:rgba(7,16,10,.97); --top-border:rgba(111,175,130,.14);
+  --card-bg:#0d1a0f; --card-hover:rgba(111,175,130,.05);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--ink);color:var(--t);font-family:"DM Sans",sans-serif;font-size:13px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+
+/* ── Top bar ── */
+#top{height:52px;display:flex;align-items:center;gap:12px;padding:0 20px;
+     background:var(--top-bg);border-bottom:1px solid var(--top-border);position:sticky;top:0;z-index:100}
+.logo{font-family:"DM Mono",monospace;font-size:.8rem;font-weight:500;color:var(--gl);letter-spacing:.04em}
+.logo span{color:var(--t2);font-weight:400}
+.top-subtitle{font-family:"DM Mono",monospace;font-size:.6rem;color:var(--t3);border-left:1px solid var(--bd2);padding-left:12px}
+.top-spacer{flex:1}
+#clock{font-family:"DM Mono",monospace;font-size:.58rem;color:var(--t3)}
+.back-btn{font-family:"DM Sans",sans-serif;font-size:.68rem;font-weight:500;color:var(--t2);
+          background:none;border:1px solid var(--bd2);padding:4px 10px;border-radius:5px;cursor:pointer;text-decoration:none;
+          transition:.15s;display:inline-flex;align-items:center;gap:5px}
+.back-btn:hover{border-color:var(--gl);color:var(--gl)}
+
+/* ── PIN gate ── */
+#pin-gate{position:fixed;inset:0;background:rgba(7,16,10,.97);z-index:200;
+          display:flex;align-items:center;justify-content:center}
+.pin-card{background:var(--c1);border:1px solid var(--bd2);border-radius:10px;padding:32px 40px;
+          width:320px;text-align:center}
+.pin-card h2{font-family:"DM Mono",monospace;font-size:.95rem;color:var(--gl);margin-bottom:8px}
+.pin-card p{font-size:.7rem;color:var(--t3);margin-bottom:20px}
+.pin-input{width:100%;background:var(--input-bg);border:1px solid var(--bd2);border-radius:6px;
+           color:var(--t);font-family:"DM Mono",monospace;font-size:1.1rem;text-align:center;
+           padding:10px;letter-spacing:.3em;outline:none;transition:border .15s}
+.pin-input:focus{border-color:var(--gl)}
+.pin-btn{margin-top:14px;width:100%;background:var(--gl);color:var(--g);border:none;border-radius:6px;
+         font-family:"DM Sans",sans-serif;font-weight:600;font-size:.75rem;padding:10px;cursor:pointer;transition:.15s}
+.pin-btn:hover{filter:brightness(1.1)}
+.pin-hint{margin-top:10px;font-size:.55rem;color:var(--t3)}
+.pin-err{color:var(--red);font-size:.62rem;margin-top:6px;min-height:16px}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+
+/* ── Layout ── */
+#page{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+.section-header{display:flex;align-items:center;gap:10px;margin:32px 0 12px}
+.section-header h2{font-family:"DM Mono",monospace;font-size:.78rem;font-weight:500;
+                   color:var(--gl);text-transform:uppercase;letter-spacing:.12em}
+.section-header::after{content:"";flex:1;height:1px;background:var(--bd)}
+.refresh-note{font-family:"DM Mono",monospace;font-size:.52rem;color:var(--t3)}
+
+/* ── Tables ── */
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--bd)}
+table{width:100%;border-collapse:collapse;font-size:.7rem}
+thead th{background:var(--c1);font-family:"DM Mono",monospace;font-size:.58rem;font-weight:500;
+         color:var(--t3);text-transform:uppercase;letter-spacing:.1em;padding:8px 12px;
+         border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--bd)}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--card-hover)}
+tbody td{padding:9px 12px;color:var(--t);font-family:"DM Mono",monospace;vertical-align:middle}
+td.label{font-family:"DM Sans",sans-serif;color:var(--t2)}
+
+/* Status indicators */
+.dot-verde{color:var(--verde);font-size:1.1em}
+.dot-amb{color:var(--amb);font-size:1.1em}
+.dot-crit{color:#C25A1A;font-size:1.1em}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:.55rem;
+       font-family:"DM Mono",monospace;font-weight:500}
+.badge-ok{background:rgba(111,175,130,.12);color:var(--verde);border:1px solid rgba(111,175,130,.25)}
+.badge-warn{background:rgba(186,117,23,.12);color:var(--amb);border:1px solid rgba(186,117,23,.25)}
+.badge-crit{background:rgba(194,90,26,.12);color:#C25A1A;border:1px solid rgba(194,90,26,.25)}
+.badge-empty{background:rgba(194,90,26,.2);color:#C25A1A;border:1px solid rgba(194,90,26,.35)}
+
+/* ── Checklist ── */
+.checklist{background:var(--c1);border:1px solid var(--bd);border-radius:8px;padding:4px 0}
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;
+            border-bottom:1px solid var(--bd);cursor:pointer;transition:background .12s}
+.check-item:last-child{border-bottom:none}
+.check-item:hover{background:var(--card-hover)}
+.check-item input[type=checkbox]{width:14px;height:14px;accent-color:var(--gl);
+                                  flex-shrink:0;margin-top:1px;cursor:pointer}
+.check-item.done .check-label{color:var(--t3);text-decoration:line-through}
+.check-label{font-size:.72rem;line-height:1.5;color:var(--t)}
+.check-label small{display:block;color:var(--t3);font-size:.6rem;font-family:"DM Mono",monospace}
+
+/* ── Log form ── */
+.log-form{background:var(--c1);border:1px solid var(--bd);border-radius:8px;padding:16px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.form-full{grid-column:1/-1}
+label.fl{display:block;font-size:.6rem;color:var(--t3);font-family:"DM Mono",monospace;
+         text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+input.fi,select.fi,textarea.fi{width:100%;background:var(--input-bg);border:1px solid var(--bd2);
+  border-radius:5px;color:var(--t);font-family:"DM Mono",monospace;font-size:.7rem;
+  padding:7px 10px;outline:none;transition:border .15s;resize:vertical}
+input.fi:focus,select.fi:focus,textarea.fi:focus{border-color:var(--gl)}
+select.fi option{background:var(--c1)}
+.submit-btn{background:var(--gl);color:var(--g);border:none;border-radius:6px;
+            font-family:"DM Sans",sans-serif;font-weight:600;font-size:.72rem;
+            padding:8px 20px;cursor:pointer;transition:.15s;float:right}
+.submit-btn:hover{filter:brightness(1.1)}
+
+/* ── Inventory edit modal ── */
+#inv-modal{display:none;position:fixed;inset:0;background:rgba(7,16,10,.85);z-index:300;
+           align-items:center;justify-content:center}
+#inv-modal.open{display:flex}
+.modal-card{background:var(--c1);border:1px solid var(--bd2);border-radius:10px;padding:28px 32px;width:340px}
+.modal-card h3{font-family:"DM Mono",monospace;font-size:.8rem;color:var(--gl);margin-bottom:14px}
+.modal-err{color:#C25A1A;font-size:.6rem;min-height:16px;margin-top:4px}
+.modal-row{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+.btn-cancel{background:none;border:1px solid var(--bd2);color:var(--t2);font-family:"DM Sans",sans-serif;
+            font-size:.68rem;font-weight:500;padding:7px 14px;border-radius:5px;cursor:pointer;transition:.15s}
+.btn-cancel:hover{border-color:var(--t);color:var(--t)}
+.btn-save{background:var(--gl);color:var(--g);border:none;font-family:"DM Sans",sans-serif;
+          font-size:.68rem;font-weight:600;padding:7px 16px;border-radius:5px;cursor:pointer;transition:.15s}
+.btn-save:hover{filter:brightness(1.1)}
+
+/* ── Misc ── */
+.empty-state{text-align:center;padding:30px;color:var(--t3);font-family:"DM Mono",monospace;font-size:.65rem}
+.ts-cell{font-size:.58rem;color:var(--t3)}
+.action-btn{background:none;border:1px solid var(--bd);color:var(--t2);font-family:"DM Mono",monospace;
+            font-size:.55rem;padding:2px 7px;border-radius:4px;cursor:pointer;transition:.12s;white-space:nowrap}
+.action-btn:hover{border-color:var(--gl);color:var(--gl)}
+.pct-cell{font-size:.8rem;font-weight:500}
+.sources-cell{font-size:.58rem;color:var(--t3)}
+#sensor-refresh{font-family:"DM Mono",monospace;font-size:.55rem;color:var(--t3)}
+</style>
+</head>
+<body>
+
+<!-- PIN Gate -->
+<div id="pin-gate">
+  <div class="pin-card">
+    <h2>PlantaOS</h2>
+    <p>Acesso restrito a técnicos autorizados</p>
+    <input id="pin-in" class="pin-input" type="password" maxlength="20"
+           placeholder="PIN" autocomplete="off">
+    <div id="pin-err" class="pin-err"></div>
+    <button class="pin-btn" onclick="checkPin()">Entrar</button>
+    <div class="pin-hint">Demo: planta2026</div>
+  </div>
+</div>
+
+<!-- Top bar -->
+<div id="top">
+  <div class="logo">Planta<span>OS</span></div>
+  <div class="top-subtitle">Manutenção · Rock in Rio Lisboa 2026</div>
+  <div class="top-spacer"></div>
+  <span id="clock"></span>&nbsp;&nbsp;
+  <span id="sensor-refresh"></span>&nbsp;&nbsp;
+  <a class="back-btn" href="/">← Dashboard</a>
+</div>
+
+<!-- Main content -->
+<div id="page">
+
+  <!-- 1. SENSOR HEALTH TABLE -->
+  <div class="section-header">
+    <h2>Saúde dos Sensores</h2>
+    <span class="refresh-note">Auto-refresh 30s</span>
+  </div>
+  <div class="tbl-wrap">
+    <table id="sensor-tbl">
+      <thead>
+        <tr>
+          <th>Cluster</th>
+          <th>Secção</th>
+          <th>Status</th>
+          <th>Última leitura</th>
+          <th>Confiança</th>
+          <th>Fontes activas</th>
+          <th>Acção</th>
+        </tr>
+      </thead>
+      <tbody id="sensor-tbody">
+        <tr><td colspan="7" class="empty-state">A carregar dados…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. READINESS CHECKLIST -->
+  <div class="section-header">
+    <h2>Checklist Pré-Festival (19–20 Jun 2026)</h2>
+  </div>
+  <div class="checklist" id="checklist"></div>
+
+  <!-- 3. MAINTENANCE LOG -->
+  <div class="section-header">
+    <h2>Registo de Manutenção</h2>
+  </div>
+  <div class="log-form">
+    <div class="form-grid">
+      <div>
+        <label class="fl">Técnico</label>
+        <input id="log-tech" class="fi" type="text" placeholder="Nome do técnico">
+      </div>
+      <div>
+        <label class="fl">Cluster</label>
+        <select id="log-cluster" class="fi">
+          <option value="">Seleccionar…</option>
+          <option>WC-01</option><option>WC-02</option><option>WC-03</option>
+          <option>WC-04</option><option>WC-05</option><option>WC-06</option>
+          <option>WC-07</option><option>WC-08</option><option>Geral</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl">Acção</label>
+        <input id="log-action" class="fi" type="text" placeholder="ex: Substituição sensor Reed">
+      </div>
+      <div>
+        <label class="fl">Notas</label>
+        <input id="log-notes" class="fi" type="text" placeholder="Observações opcionais">
+      </div>
+    </div>
+    <button class="submit-btn" onclick="submitLog()">Registar</button>
+    <div style="clear:both"></div>
+  </div>
+  <div style="margin-top:10px" class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Data/Hora</th><th>Técnico</th><th>Cluster</th><th>Acção</th><th>Notas</th></tr>
+      </thead>
+      <tbody id="log-tbody">
+        <tr><td colspan="5" class="empty-state">Sem registos</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. SPARE PARTS INVENTORY -->
+  <div class="section-header">
+    <h2>Inventário de Peças</h2>
+  </div>
+  <div class="tbl-wrap">
+    <table id="inv-tbl">
+      <thead>
+        <tr><th>Componente</th><th>Stock</th><th>Mínimo</th><th>Status</th><th>Editar</th></tr>
+      </thead>
+      <tbody id="inv-tbody">
+        <tr><td colspan="5" class="empty-state">A carregar…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- #page -->
+
+<!-- Inventory edit modal -->
+<div id="inv-modal">
+  <div class="modal-card">
+    <h3>Actualizar Stock</h3>
+    <div>
+      <label class="fl">Componente</label>
+      <input id="inv-comp-display" class="fi" readonly>
+    </div>
+    <div style="margin-top:10px">
+      <label class="fl">Novo stock</label>
+      <input id="inv-new-stock" class="fi" type="number" min="0" placeholder="Quantidade">
+    </div>
+    <div style="margin-top:10px">
+      <label class="fl">PIN de administrador</label>
+      <input id="inv-pin" class="fi" type="password" placeholder="PIN">
+    </div>
+    <div id="inv-modal-err" class="modal-err"></div>
+    <div class="modal-row">
+      <button class="btn-cancel" onclick="closeInvModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveInventory()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ── PIN gate ──────────────────────────────────────────────────────────────
+const CORRECT_PIN = "planta2026";  // client-side gate (backend also validates for writes)
+
+function checkPin() {
+  const val = document.getElementById("pin-in").value;
+  if (val === CORRECT_PIN) {
+    document.getElementById("pin-gate").style.display = "none";
+    init();
+  } else {
+    const card = document.querySelector(".pin-card");
+    document.getElementById("pin-err").textContent = "PIN incorrecto";
+    card.style.animation = "";
+    setTimeout(() => { card.style.animation = "shake .4s"; }, 10);
+  }
+}
+
+document.getElementById("pin-in").addEventListener("keydown", e => {
+  if (e.key === "Enter") checkPin();
+});
+
+// ── Clock ─────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  document.getElementById("clock").textContent =
+    `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}` +
+    ` ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Checklist ─────────────────────────────────────────────────────────────
+const CHECKLIST_ITEMS = [
+  { id: "cl1", label: "Todos os 8 LilyGos alimentados e a reportar",
+    note: "Verificar painel de conectividade antes das 09:00" },
+  { id: "cl2", label: "Todos os 16 pares IR calibrados (entrada + saída por cluster)",
+    note: "IR E18-D80NK · threshold 40–60 cm · ver procedimento de calibração" },
+  { id: "cl3", label: "WebSocket estável durante 1h sem quedas",
+    note: "Monitorizar /ws no browser durante teste de carga" },
+  { id: "cl4", label: "SCOR Sensaway a receber dados",
+    note: "Confirmar token KPI activo e payload chegando a cada 30s" },
+  { id: "cl5", label: "Todos os clusters visíveis no mapa /twin",
+    note: "WC-01 a WC-08 devem aparecer com dots verdes" },
+  { id: "cl6", label: "App visitante carrega < 2s em teste mobile",
+    note: "Testar em 4G com DevTools throttling" },
+  { id: "cl7", label: "Energia de reserva testada (UPS por hub de cluster)",
+    note: "Simular queda de corrente — confirmar autonomia ≥ 2h" },
+  { id: "cl8", label: "Thresholds de alerta confirmados com equipa de ops",
+    note: "Lotação crítica: 90% · Alerta alto: 75% · Moderado: 50%" },
+];
+
+const LS_KEY = "plantaos_checklist_v1";
+
+function loadChecklist() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch(e) {}
+  const el = document.getElementById("checklist");
+  el.innerHTML = "";
+  CHECKLIST_ITEMS.forEach(item => {
+    const checked = !!saved[item.id];
+    const div = document.createElement("div");
+    div.className = "check-item" + (checked ? " done" : "");
+    div.innerHTML = `<input type="checkbox" id="${item.id}" ${checked ? "checked" : ""}>
+      <label class="check-label" for="${item.id}">${item.label}
+        <small>${item.note}</small>
+      </label>`;
+    div.querySelector("input").addEventListener("change", function() {
+      try {
+        let s = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+        s[item.id] = this.checked;
+        localStorage.setItem(LS_KEY, JSON.stringify(s));
+      } catch(e) {}
+      div.classList.toggle("done", this.checked);
+    });
+    el.appendChild(div);
+  });
+}
+
+// ── Sensor health ─────────────────────────────────────────────────────────
+let lastSensorTs = null;
+
+async function refreshSensors() {
+  try {
+    const data = await fetch("/api/v1/clusters").then(r => r.json());
+    renderSensors(data);
+    lastSensorTs = new Date();
+    const el = document.getElementById("sensor-refresh");
+    el.textContent = "↺ " + lastSensorTs.toLocaleTimeString("pt-PT");
+  } catch(e) {
+    document.getElementById("sensor-refresh").textContent = "⚠ erro fetch";
+  }
+}
+
+function renderSensors(data) {
+  const tbody = document.getElementById("sensor-tbody");
+  const rows = [];
+  const clusters = data.clusters || [];
+  clusters.forEach(cl => {
+    const secoes = cl.secoes || {};
+    Object.entries(secoes).forEach(([secKey, sec]) => {
+      const conf = sec.confianca_pct ?? 0;
+      const sources = sec.fontes_activas || [];
+      let statusClass, statusIcon, statusBadge;
+      if (sources.length === 0 || conf < 40) {
+        statusClass = "dot-crit"; statusIcon = "✕";
+        statusBadge = '<span class="badge badge-crit">CRÍTICO</span>';
+      } else if (conf < 70) {
+        statusClass = "dot-amb"; statusIcon = "⚠";
+        statusBadge = '<span class="badge badge-warn">DEGRADADO</span>';
+      } else {
+        statusClass = "dot-verde"; statusIcon = "●";
+        statusBadge = '<span class="badge badge-ok">OK</span>';
+      }
+      const srcStr = sources.length > 0
+        ? sources.map(s => `<span style="margin-right:4px">${s}</span>`).join("")
+        : '<span style="color:#C25A1A">–</span>';
+      const now = new Date();
+      const lastSeen = now.toLocaleTimeString("pt-PT");
+      rows.push(`<tr>
+        <td class="label">${cl.cluster_id}</td>
+        <td>${secKey}</td>
+        <td><span class="${statusClass}">${statusIcon}</span> ${statusBadge}</td>
+        <td class="ts-cell">${lastSeen}</td>
+        <td class="pct-cell" style="color:${conf>=70?'var(--verde)':conf>=40?'var(--amb)':'#C25A1A'}">${conf.toFixed(0)}%</td>
+        <td class="sources-cell">${srcStr}</td>
+        <td><button class="action-btn" onclick="addQuickLog('${cl.cluster_id}','${secKey}')">Registar</button></td>
+      </tr>`);
+    });
+  });
+  tbody.innerHTML = rows.length ? rows.join("") :
+    '<tr><td colspan="7" class="empty-state">Sem dados de clusters</td></tr>';
+}
+
+function addQuickLog(cluster, sec) {
+  document.getElementById("log-cluster").value = cluster;
+  document.getElementById("log-action").value = `Verificação sensor — secção ${sec}`;
+  document.getElementById("log-action").focus();
+  document.getElementById("log-action").scrollIntoView({behavior:"smooth", block:"center"});
+}
+
+// ── Maintenance log ───────────────────────────────────────────────────────
+async function refreshLog() {
+  try {
+    const data = await fetch("/api/v1/maintenance/log").then(r => r.json());
+    renderLog(data.entries || []);
+  } catch(e) { /* silent */ }
+}
+
+function renderLog(entries) {
+  const tbody = document.getElementById("log-tbody");
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Sem registos</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entries.map(e => {
+    const d = new Date(e.ts * 1000);
+    const ts = d.toLocaleString("pt-PT", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+    return `<tr>
+      <td class="ts-cell">${ts}</td>
+      <td>${esc(e.technician)}</td>
+      <td class="label">${esc(e.cluster)}</td>
+      <td>${esc(e.action)}</td>
+      <td style="color:var(--t3)">${esc(e.notes||"")}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function submitLog() {
+  const tech   = document.getElementById("log-tech").value.trim();
+  const cluster= document.getElementById("log-cluster").value.trim();
+  const action = document.getElementById("log-action").value.trim();
+  const notes  = document.getElementById("log-notes").value.trim();
+  if (!tech || !cluster || !action) {
+    alert("Preencha Técnico, Cluster e Acção.");
+    return;
+  }
+  try {
+    const r = await fetch("/api/v1/maintenance/log", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({technician:tech, cluster, action, notes}),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById("log-tech").value = "";
+    document.getElementById("log-cluster").value = "";
+    document.getElementById("log-action").value = "";
+    document.getElementById("log-notes").value = "";
+    await refreshLog();
+  } catch(e) {
+    alert("Erro ao registar: " + e.message);
+  }
+}
+
+// ── Inventory ─────────────────────────────────────────────────────────────
+let _editingComponent = null;
+
+async function refreshInventory() {
+  try {
+    const data = await fetch("/api/v1/maintenance/inventory").then(r => r.json());
+    renderInventory(data.inventory || []);
+  } catch(e) { /* silent */ }
+}
+
+function renderInventory(items) {
+  const tbody = document.getElementById("inv-tbody");
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Sem inventário</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(item => {
+    let badgeCls, badgeLabel;
+    if (item.status === "EMPTY")        { badgeCls="badge-empty"; badgeLabel="ESGOTADO"; }
+    else if (item.status === "WARNING") { badgeCls="badge-warn";  badgeLabel="BAIXO"; }
+    else                                { badgeCls="badge-ok";    badgeLabel="OK"; }
+    return `<tr>
+      <td class="label">${esc(item.component)}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:500">${item.stock} ${item.unit||""}</td>
+      <td style="color:var(--t3);font-family:'DM Mono',monospace">${item.minimum} ${item.unit||""}</td>
+      <td><span class="badge ${badgeCls}">${badgeLabel}</span></td>
+      <td><button class="action-btn" onclick="openInvModal('${esc(item.component)}',${item.stock})">Editar</button></td>
+    </tr>`;
+  }).join("");
+}
+
+function openInvModal(component, currentStock) {
+  _editingComponent = component;
+  document.getElementById("inv-comp-display").value = component;
+  document.getElementById("inv-new-stock").value = currentStock;
+  document.getElementById("inv-pin").value = "";
+  document.getElementById("inv-modal-err").textContent = "";
+  document.getElementById("inv-modal").classList.add("open");
+  document.getElementById("inv-new-stock").focus();
+}
+
+function closeInvModal() {
+  document.getElementById("inv-modal").classList.remove("open");
+  _editingComponent = null;
+}
+
+async function saveInventory() {
+  const stock = parseInt(document.getElementById("inv-new-stock").value, 10);
+  const pin   = document.getElementById("inv-pin").value;
+  if (isNaN(stock) || stock < 0) {
+    document.getElementById("inv-modal-err").textContent = "Stock inválido";
+    return;
+  }
+  if (!pin) {
+    document.getElementById("inv-modal-err").textContent = "PIN obrigatório";
+    return;
+  }
+  try {
+    const encoded = encodeURIComponent(_editingComponent);
+    const r = await fetch(`/api/v1/maintenance/inventory/${encoded}`, {
+      method: "PUT",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({stock, pin}),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({detail:"Erro"}));
+      document.getElementById("inv-modal-err").textContent = err.detail || "Erro";
+      return;
+    }
+    closeInvModal();
+    await refreshInventory();
+  } catch(e) {
+    document.getElementById("inv-modal-err").textContent = "Erro de rede";
+  }
+}
+
+// Close modal on backdrop click
+document.getElementById("inv-modal").addEventListener("click", function(e) {
+  if (e.target === this) closeInvModal();
+});
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+// ── Init (called after PIN) ────────────────────────────────────────────────
+async function init() {
+  loadChecklist();
+  await Promise.all([refreshSensors(), refreshLog(), refreshInventory()]);
+  // Auto-refresh sensors every 30s
+  setInterval(refreshSensors, 30000);
+  // Auto-refresh log every 15s
+  setInterval(refreshLog, 15000);
+}
+</script>
+</body>
+</html>

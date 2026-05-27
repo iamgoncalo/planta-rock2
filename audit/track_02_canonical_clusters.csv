@@ -1,0 +1,10 @@
+cluster_id,nome,tipo,total_places,masc_places,fem_places,pmr_count,uri_count,source,confidence
+WC-01,V34 — Near P1,misto,135,72,63,0,0,XLSX+CODE_MATCH,HIGH
+WC-02,V35 — Female Dominant,misto,126,54,72,0,0,XLSX+CODE_MATCH,HIGH
+WC-03,S36 — Entrada Principal,misto,102,54,48,0,0,XLSX+CODE_MATCH,HIGH
+WC-04,S37 — Summit +20m,misto,150,84,66,0,0,XLSX+CODE_MATCH,HIGH
+WC-05,M38 — ENTRY ONLY (UNISSEX),unissex_entry_only,133,0,0,0,0,XLSX+CODE_MATCH,HIGH
+WC-06,W39/S39 — Maior cluster,unissex,208,0,0,0,0,XLSX+CODE_MATCH,HIGH
+WC-07,M40 — Lockers,misto,138,84,54,0,0,XLSX+CODE_MATCH,HIGH
+WC-08,V41 — Produção,misto,145,84,61,0,0,XLSX+CODE_MATCH,MEDIUM_PENDING_FIELD_VERIFY
+TOTAL,All clusters,mixed,1137,432,364,0,0,XLSX+CODE_MATCH,HIGH

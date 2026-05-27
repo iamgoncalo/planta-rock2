@@ -12,7 +12,7 @@
 
 ## Codebases
 - Backend A: this repository, FastAPI 0.115, Python 3.14, port 8000, 202 tests passing — SOURCE OF TRUTH [CONFIRMED_FROM_FILES]
-- Backend B: separate older codebase, port 8001 — reference only, NOT production, do not port features without explicit instruction [REQUIRED_BY_USER]
+- Backend B: separate older codebase running on the same machine at port 8001 — reference only, NOT production, do not touch it, do not port features without explicit instruction [REQUIRED_BY_USER]
 - Frontend (Next.js 15): lives under frontend/ in this repo, secondary interface [CONFIRMED_FROM_FILES]
 - Embedded dashboard: app/static/index.html — single-file SPA served at GET / [CONFIRMED_FROM_FILES]
 - Railway deployment: NOT VERIFIED — do not claim the backend is deployed [REQUIRED_BY_USER]

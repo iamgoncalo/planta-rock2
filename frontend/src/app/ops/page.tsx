@@ -1,249 +1,85 @@
-"use client";
+'use client'
+import { useState } from 'react'
+import { useWS } from '@/context/WSContext'
+import type { AlertItem, Cluster, SectionState } from '@/types/api'
 
-import { useState, useEffect, useCallback } from "react";
-import { useClusters } from "@/hooks/useClusters";
-import { useAlerts } from "@/hooks/useAlerts";
-import { getWSInstance } from "@/lib/ws";
-import type { RoutingRecommendation } from "@/types";
-import AlertList from "@/components/ops/AlertList";
-import RoutingPanel from "@/components/ops/RoutingPanel";
-
-function generateCSV(
-  clusters: ReturnType<typeof useClusters>["clusters"]
-): string {
-  const rows: string[][] = [
-    [
-      "cluster_id",
-      "nome",
-      "tipo",
-      "secao",
-      "ocupacao_pct",
-      "ocupacao_absoluta",
-      "fila_actual",
-      "tempo_espera_min",
-      "fluxo_entrada_pmin",
-      "fluxo_saida_pmin",
-      "status",
-      "confianca_pct",
-      "fontes_activas",
-    ],
-  ];
-
-  for (const c of clusters) {
-    for (const [key, sec] of Object.entries(c.secoes)) {
-      if (!sec) continue;
-      const secLabel = key === "U" ? "Unissex" : key === "M" ? "Masculino" : "Feminino";
-      rows.push([
-        c.cluster_id,
-        c.nome,
-        c.tipo,
-        secLabel,
-        sec.ocupacao_pct.toFixed(1),
-        String(sec.ocupacao_absoluta),
-        String(sec.fila_actual),
-        sec.tempo_espera_min.toFixed(1),
-        sec.fluxo_entrada_pmin.toFixed(2),
-        sec.fluxo_saida_pmin.toFixed(2),
-        sec.status,
-        sec.confianca_pct.toFixed(0),
-        sec.fontes_activas.join("|"),
-      ]);
-    }
-  }
-
-  return rows.map((r) => r.join(",")).join("\n");
+function sevColor(s: string) {
+  return s==='CRITICO'?'var(--critical)':s==='ALTO'?'var(--amber)':s==='MEDIO'?'var(--gold)':'var(--text-soft)'
 }
 
 export default function OpsPage() {
-  const { clusters, wsStatus } = useClusters();
-  const { alerts, resolveAlert } = useAlerts();
-  const [routing, setRouting] = useState<RoutingRecommendation[]>([]);
-  const [lastScorPush, setLastScorPush] = useState<number>(Date.now() / 1000);
-  const [scorStatus, setScorStatus] = useState<number>(200);
+  const { alerts, clusters, kpis } = useWS()
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
-  // Subscribe to routing recs from WS
-  useEffect(() => {
-    const ws = getWSInstance();
-    const handler = (payload: { routing_recommendations?: RoutingRecommendation[] }) => {
-      if (payload.routing_recommendations) {
-        setRouting(payload.routing_recommendations);
-        setLastScorPush(Date.now() / 1000);
-        setScorStatus(200);
-      }
-    };
-    ws.addListener(handler as Parameters<typeof ws.addListener>[0]);
-    ws.connect();
-    return () => ws.removeListener(handler as Parameters<typeof ws.addListener>[0]);
-  }, []);
-
-  const handleExport = useCallback(() => {
-    const csv = generateCSV(clusters);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `plantaos-export-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [clusters]);
-
-  const onlineClusters = clusters.filter((c) => {
-    const sections = Object.values(c.secoes).filter(Boolean);
-    return sections.some((s) => s?.status !== "offline");
-  }).length;
-
-  const irOnline = clusters.reduce((sum, c) => {
-    return (
-      sum +
-      Object.values(c.secoes).filter(
-        (s) => s?.fontes_activas.includes("IR")
-      ).length * 2
-    );
-  }, 0);
-
-  const scorAge = Math.floor(Date.now() / 1000 - lastScorPush);
-  const scorAgeStr =
-    scorAge < 60 ? `${scorAge}s` : `${Math.floor(scorAge / 60)}min`;
+  const active = alerts.filter((a: AlertItem) => !dismissed.has(`${a.cluster_id}-${a.ts}`))
 
   return (
-    <div>
-      <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: "#e2e8f0" }}>
-            Operações
-          </h1>
-          <p className="text-sm" style={{ color: "#94a3b8" }}>
-            Alertas, routing e estado da rede de sensores
-          </p>
-        </div>
-        <button
-          onClick={handleExport}
-          className="px-4 py-2 rounded text-sm font-medium"
-          style={{
-            backgroundColor: "#1a1f2e",
-            border: "1px solid #2d3348",
-            color: "#94a3b8",
-          }}
-        >
-          Exportar CSV
-        </button>
+    <div style={{padding:16,maxWidth:1200,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <h1>Operações</h1>
+        <span className="simulado-badge">SIMULADO</span>
       </div>
 
-      {/* Network health bar */}
-      <div
-        className="mb-4 p-3 rounded-lg flex flex-wrap gap-4 text-xs"
-        style={{
-          backgroundColor: "#1a1f2e",
-          border: "1px solid #2d3348",
-        }}
-      >
-        <span>
-          <span style={{ color: "#94a3b8" }}>Rede: </span>
-          <span style={{ color: onlineClusters > 0 ? "#6FAF82" : "#C25A1A" }}>
-            {onlineClusters}/{clusters.length} clusters online
-          </span>
-        </span>
-        <span>
-          <span style={{ color: "#94a3b8" }}>Sensores IR: </span>
-          <span style={{ color: irOnline > 0 ? "#6FAF82" : "#C25A1A" }}>
-            {irOnline}/24 online
-          </span>
-        </span>
-        <span>
-          <span style={{ color: "#94a3b8" }}>WebSocket: </span>
-          <span
-            style={{
-              color:
-                wsStatus === "connected"
-                  ? "#6FAF82"
-                  : wsStatus === "connecting"
-                    ? "#D48B3A"
-                    : "#C25A1A",
-            }}
-          >
-            {wsStatus}
-          </span>
-        </span>
-        <span>
-          <span style={{ color: "#94a3b8" }}>SCOR: </span>
-          <span style={{ color: "#6FAF82" }}>
-            último push há {scorAgeStr} · HTTP {scorStatus}
-          </span>
-        </span>
-      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr',gap:16}}>
+        {/* KPI bar */}
+        {kpis && (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+            {[
+              {label:'Flow Index', value:kpis.kpi_01?.toFixed(0)+'', unit:''},
+              {label:'Util. Média', value:kpis.kpi_02?.toFixed(0)+'', unit:'%'},
+              {label:'Alertas Críticos', value:''+kpis.kpi_03, unit:''},
+              {label:'Redireccionados', value:''+kpis.kpi_04, unit:''},
+            ].map(k => (
+              <div key={k.label} className="card" style={{textAlign:'center'}}>
+                <div style={{fontSize:13,color:'var(--text-soft)',marginBottom:4}}>{k.label}</div>
+                <div className="mono display" style={{fontSize:'clamp(32px,8vw,48px)'}}>{k.value}{k.unit}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
-      {/* Main two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Alerts */}
-        <div
-          style={{
-            backgroundColor: "#1a1f2e",
-            border: "1px solid #2d3348",
-            borderRadius: 10,
-            padding: 16,
-          }}
-        >
-          <AlertList alerts={alerts} onResolve={resolveAlert} />
-        </div>
-
-        {/* Routing */}
-        <div
-          style={{
-            backgroundColor: "#1a1f2e",
-            border: "1px solid #2d3348",
-            borderRadius: 10,
-            padding: 16,
-          }}
-        >
-          <RoutingPanel recommendations={routing} />
-        </div>
-      </div>
-
-      {/* Timeline */}
-      <div
-        className="mt-6"
-        style={{
-          backgroundColor: "#1a1f2e",
-          border: "1px solid #2d3348",
-          borderRadius: 10,
-          padding: 16,
-        }}
-      >
-        <h2 className="font-bold text-sm mb-3" style={{ color: "#e2e8f0" }}>
-          Timeline do Dia
-        </h2>
-        <div className="flex flex-col gap-2 text-xs" style={{ color: "#94a3b8" }}>
-          <div className="flex gap-3">
-            <span className="font-mono w-12">18:00</span>
-            <span>Abertura de portas — monitorização iniciada</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="font-mono w-12">18:30</span>
-            <span>Primeiro show — clusters activados</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="font-mono w-12">21:00</span>
-            <span>Headliner — surge esperado + 30min</span>
-          </div>
-          {alerts.slice(0, 5).map((a) => (
-            <div key={a.id} className="flex gap-3">
-              <span className="font-mono w-12">
-                {new Date(a.ts_inicio * 1000).toLocaleTimeString("pt-PT", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-              <span
-                style={{
-                  color: a.severidade === "CRITICO" ? "#C25A1A" : "#D48B3A",
-                }}
-              >
-                [{a.severidade}] {a.cluster_id} — {a.mensagem}
-              </span>
+        <div className="card">
+          <h2 style={{marginBottom:12}}>Alertas Activos {active.length > 0 && <span style={{color:'var(--critical)'}}>({active.length})</span>}</h2>
+          {active.length === 0 ? (
+            <p style={{color:'var(--text-soft)'}}>Sem alertas activos.</p>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {active.map((a: AlertItem) => (
+                <div key={`${a.cluster_id}-${a.ts}`} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:8,background:'var(--surface-2)',border:`1px solid ${sevColor(a.severidade)}40`}}>
+                  <div>
+                    <span style={{fontWeight:700,color:sevColor(a.severidade),marginRight:8}}>{a.severidade}</span>
+                    <span style={{fontWeight:600,marginRight:8}}>{a.cluster_id}</span>
+                    <span style={{color:'var(--text-soft)',fontSize:15}}>{a.mensagem}</span>
+                  </div>
+                  <button onClick={() => setDismissed(new Set([...dismissed, `${a.cluster_id}-${a.ts}`]))}
+                    style={{padding:'6px 14px',borderRadius:6,border:'1px solid var(--border)',background:'var(--surface)',cursor:'pointer',fontSize:13,fontFamily:'DM Sans,sans-serif',minHeight:40}}>
+                    Resolver
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </div>
+
+        {/* Cluster grid */}
+        <div className="card">
+          <h2 style={{marginBottom:12}}>Estado Clusters</h2>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+            {clusters.map((c: Cluster) => {
+              const secs = Object.values(c.secoes||{}) as SectionState[]
+              const avgOcc = secs.length ? secs.reduce((a: number, s: SectionState) => a + (s.ocupacao_pct||0), 0) / secs.length : 0
+              const statusColor = avgOcc >= 90 ? 'var(--critical)' : avgOcc >= 75 ? 'var(--amber)' : avgOcc >= 50 ? 'var(--gold)' : 'var(--green-bright)'
+              return (
+                <div key={c.cluster_id} style={{padding:'10px 14px',borderRadius:8,border:'1px solid var(--border)',background:'var(--surface-2)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontWeight:600}}>{c.cluster_id}</span>
+                  <span className="mono" style={{fontSize:18,color:statusColor}}>{avgOcc.toFixed(0)}%</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

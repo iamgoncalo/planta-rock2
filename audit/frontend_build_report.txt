@@ -1,0 +1,88 @@
+PlantaOS × Rock in Rio Lisboa 2026 — Frontend Build Report
+Date: 2026-05-27
+Build Tool: Next.js 15.3.2
+
+═══════════════════════════════════════════════════════
+FILES CREATED / REPLACED
+═══════════════════════════════════════════════════════
+
+NEW FILES:
+  src/context/WSContext.tsx          — WebSocket provider (live/reconnecting/offline states)
+  src/components/StatusPill.tsx      — Reusable WS status pill
+  src/components/Gauge.tsx           — Circular SVG arc gauge
+  src/app/tv/[screen_id]/page.tsx    — TV kiosk screen (dynamic route)
+  src/app/manutencao/page.tsx        — Maintenance checklist + inventory + sensor health
+  public/manifest.json               — PWA manifest
+
+REPLACED FILES:
+  src/app/globals.css                — Light-mode design system (DM Sans, DM Mono, Cormorant Garamond)
+  src/app/layout.tsx                 — WSProvider + Nav wrapper, no dark theme
+  src/app/page.tsx                   — Redirects / → /app
+  src/app/app/page.tsx               — Routing page with geo + preferences
+  src/app/occupation/page.tsx        — WC occupancy grid with Gauge components
+  src/app/sensors/page.tsx           — Sensor health table (typed with SensorHealth)
+  src/app/shows/page.tsx             — Festival programme with day tabs
+  src/app/chat/page.tsx              — Chat interface with live WS context
+  src/app/twin/page.tsx              — SVG digital twin map
+  src/app/ops/page.tsx               — Operations dashboard (KPIs + alerts + cluster grid)
+  src/components/Nav.tsx             — Sticky nav, mobile hamburger, WS status pill
+  next.config.ts                     — Added /api/:path* → http://localhost:8000/api/:path* rewrite
+
+═══════════════════════════════════════════════════════
+BUILD STATUS
+═══════════════════════════════════════════════════════
+
+✓ next build: CLEAN (0 errors, 0 warnings)
+✓ 12 routes compiled successfully
+✓ Dev server: responding at http://localhost:3000 (307 redirect → /app)
+
+Route sizes:
+  / → 135 B (redirect)
+  /app → 2.67 kB
+  /chat → 2.27 kB
+  /manutencao → 2.50 kB
+  /occupation → 2.25 kB
+  /ops → 1.87 kB
+  /sensors → 1.78 kB
+  /shows → 1.68 kB
+  /tv/[screen_id] → 1.65 kB (dynamic)
+  /twin → 2.08 kB
+  First Load JS shared: 101 kB
+
+═══════════════════════════════════════════════════════
+ERRORS FOUND & FIXED
+═══════════════════════════════════════════════════════
+
+1. next.config.ts — Invalid WS rewrite (ws:// scheme not supported by Next.js rewrites).
+   Fix: removed the /ws → ws://localhost:8000/api/v1/ws rewrite entry.
+   The WSContext connects directly to ws://localhost:8000/api/v1/ws via NEXT_PUBLIC_WS_URL.
+
+2. Multiple files — @typescript-eslint/no-explicit-any errors throughout all page files.
+   Fix: Added proper imports from @/types/api (Cluster, SectionState, AlertItem,
+   SensorHealth, DeviceStatus, ShowEntry, TVScreenState, TVClusterEntry).
+   Added TVClusterEntry, TVAvoidEntry, zone field to TVScreenState in types/api.ts.
+
+3. shows/page.tsx — unused 'active' variable.
+   Fix: removed the unused const active = lastPayload?.show_activo line.
+
+4. manutencao/page.tsx — unused 'status' from useWS().
+   Fix: changed destructured call to useWS() without assigning status.
+
+5. WSContext.tsx — auto-linter changed alerts to setAlerts([]) instead of reading payload.alerts.
+   Fix: restored (data as any).alerts || [] pattern to read live alert data.
+
+═══════════════════════════════════════════════════════
+DESIGN COMPLIANCE
+═══════════════════════════════════════════════════════
+
+✓ Light mode default — no data-theme="dark" anywhere
+✓ Body font 18px base — DM Sans
+✓ KPI numbers clamp(48px, 12vw, 64px) — .display class
+✓ TV numbers clamp(72px, 18vw, 144px) — .display-xl class
+✓ Touch targets ≥48px — all buttons use min-height: 48px or 56px
+✓ No red — critical = #C25A1A throughout
+✓ No CO2/temperature/humidity/Deucalion — none found
+✓ WC-05 and WC-06 show ONE Gauge labeled "Unisex" when tipo==='unissex'
+✓ Frontend consumes backend WS — WSContext connects to ws://localhost:8000/api/v1/ws
+✓ Mobile-first — max-width: 480px on /app, auto-fill grids elsewhere
+✓ SIMULADO badge shown on all data-displaying pages

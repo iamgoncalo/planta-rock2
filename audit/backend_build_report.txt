@@ -1,0 +1,126 @@
+PlantaOS × Rock in Rio Lisboa 2026 — Backend Build Report
+Generated: 2026-05-27
+
+=== SUMMARY ===
+All 7 tasks completed successfully. 202 tests pass (0 failed).
+
+=== TASK 1: Forbidden-field check on POST /api/v1/sensor and POST /api/v1/prosegur ===
+
+Modified files:
+  app/routers/ingest.py
+  app/routers/prosegur.py
+
+Both endpoints now read the raw request body first (before Pydantic parsing)
+and check all top-level JSON keys (case-insensitive) against the FORBIDDEN set:
+  {co2, temperature, temperatura, humidity, humidade, temp, hum, deucalion,
+   mac, raw_mac, face_vector, person_id, lat, lon, gps}
+
+If any forbidden key is found, the endpoint returns HTTP 400 immediately:
+  {"error": "Forbidden field in payload", "forbidden_fields": [...]}
+
+The endpoints were refactored to take `Request` only (no Pydantic body param)
+and call SensorReading.model_validate() / ProsegurReading.model_validate()
+manually after the check. This ensures the forbidden check always fires first.
+
+Verified:
+  curl -X POST /api/v1/sensor -d '{"cluster_id":"WC-01","co2":500}'
+  → HTTP 400  {"error":"Forbidden field in payload","forbidden_fields":["co2"]}
+
+=== TASK 2: GET /api/v1/state ===
+
+New file: app/routers/state.py
+
+Returns FestivalState with:
+- ts, simulado=true, any_simulated=true
+- festival_day: int 1-4 if today is 20/21/27/28 Jun 2026, else null
+- current_show: active show at real clock time (from SHOWS data), or null
+- next_headliner: next upcoming headliner today with mins_until, or null
+- clusters: all 8 clusters serialised via _serialise_cluster from clusters.py
+- kpis: full KPIs dict from calculate_all_kpis
+- alerts: list of all active alerts
+
+=== TASK 3: GET /api/v1/sensors ===
+
+New file: app/routers/sensors_health.py
+
+Returns 8 SensorHealthRecord objects, one per cluster.
+Health is DETERMINISTIC per cluster per hour:
+  seed = hash(cluster_id + str(datetime.now().hour)) & 0xFFFFFFFF
+  rng = random.Random(seed)
+
+Status distribution (via seeded rng):
+  ~80% online, ~15% degraded, ~5% offline
+
+Each record includes:
+  lilygo, ir_entry, ir_exit, wifi_aggregate, camera_ml, lorawan sensors
+  overall_confidence: average of non-offline source confidences
+  issues: list of offline/degraded components
+  simulado: true
+
+=== TASK 4: GET /api/v1/tv/{screen_id} ===
+
+New file: app/routers/tv.py
+
+7 hardcoded TV screens registered (TV-PALCO-MUNDO-EAST, TV-PALCO-MUNDO-WEST,
+TV-MUSIC-VALLEY, TV-SUPER-BOCK, TV-MAIN-ENTRANCE, TV-WC-05, TV-WC-06).
+
+For each request:
+- 404 if screen_id unknown
+- Haversine distance computed from screen to each cluster
+- walk_time_s = int(dist_m / 1.2)
+- queue_wait_s = total_queue * 7
+- Ranked by: CRITICO last, then by (walk_time_s + queue_wait_s) ascending
+- Response: best_wc (rank[0]), alternatives (rank[1:3]), avoid (critico clusters)
+
+=== TASK 5: POST /api/v1/route ===
+
+New file: app/routers/route.py
+
+Body: {lat, lon, preference: "fastest"|"least_crowded"|"safest"|"accessible"}
+
+Forbidden-field check (same pattern): rejects co2, mac, gps, etc.
+Note: lat/lon in route body ARE allowed (user location).
+
+Cost model per cluster:
+  walk_time_min = dist_m / (1.2 * 60)
+  queue_wait_min = total_queue / max(1, sections * 8)
+  congestion_penalty = LOS_PENALTY["B"] = 0.0 (default LOS=B)
+  show_surge_penalty = 2.0 if (active show AND avg_occ > 80) else 0
+  low_confidence_penalty = 1.0 if avg_conf < 50 else 0
+  safety_penalty = 0.5 if entry_only else 0
+
+Preference modifiers:
+  fastest: no change
+  least_crowded: queue_wait_min *= 2.0
+  safest: safety_penalty=0, congestion_penalty *= 1.5
+  accessible: only WC-01, WC-03, WC-06, WC-07 considered
+
+Returns top 3 non-CRITICO clusters by total_cost_min. CRITICO clusters
+are flagged with avoid=True.
+
+=== TASK 6: main.py updated ===
+
+Added imports and include_router calls for:
+  state_router  → /api/v1/state
+  sensors_health → /api/v1/sensors
+  tv_router     → /api/v1/tv/{screen_id}
+  route_router  → /api/v1/route
+
+=== TASK 7: Verification ===
+
+Import check:        python3 -c "from app.main import app; print('OK')" → OK
+Test suite:          pytest -q → 202 passed, 0 failed
+/api/v1/state:       clusters=8 ✓
+/api/v1/sensors:     count=8 ✓
+/api/v1/tv/TV-WC-06: best=WC-06 ✓
+/api/v1/route:       options=3, top=WC-03 (nearest to Entrada Principal) ✓
+/api/v1/sensor (co2 forbidden): HTTP 400 ✓
+/api/v1/prosegur (humidity forbidden): HTTP 400 ✓
+/api/v1/tv/TV-UNKNOWN: HTTP 404 ✓
+accessible preference: returns WC-03, WC-07, WC-01 ✓
+
+=== INVARIANTS PRESERVED ===
+- No co2/temperature/humidity/mac/GPS in any model or payload
+- WC-05 and WC-06 secoes = {"U": ...} ONLY
+- WC-05_M, WC-05_F, WC-06_M, WC-06_F never appear anywhere
+- All new endpoints tagged simulado=true

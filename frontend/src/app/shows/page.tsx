@@ -1,79 +1,70 @@
-"use client";
+'use client'
+import { useState, useEffect } from 'react'
+import { useWS } from '@/context/WSContext'
+import type { ShowEntry } from '@/types/api'
 
-import { useState } from "react";
-import { FESTIVAL_DAYS, getShowsForDay } from "@/lib/shows";
-import { useCurrentShow } from "@/hooks/useCurrentShow";
-import Programme from "@/components/shows/Programme";
-
-const DAY_LABELS: Record<string, string> = {
-  "2026-06-20": "20 Jun",
-  "2026-06-21": "21 Jun",
-  "2026-06-27": "27 Jun",
-  "2026-06-28": "28 Jun",
-};
+const DAYS = [
+  { date: '2026-06-20', label: '20 Jun' },
+  { date: '2026-06-21', label: '21 Jun' },
+  { date: '2026-06-27', label: '27 Jun' },
+  { date: '2026-06-28', label: '28 Jun' },
+]
 
 export default function ShowsPage() {
-  const today = new Date().toISOString().slice(0, 10);
-  const defaultDay =
-    FESTIVAL_DAYS.includes(today) ? today : FESTIVAL_DAYS[0];
-  const [selectedDay, setSelectedDay] = useState(defaultDay);
-  const { show_activo } = useCurrentShow();
+  const [day, setDay] = useState(DAYS[0].date)
+  const [shows, setShows] = useState<ShowEntry[]>([])
+  const { lastPayload } = useWS()
 
-  const shows = getShowsForDay(selectedDay);
+  useEffect(() => {
+    async function load() {
+      try { const r = await fetch(`/api/v1/shows?date=${day}`); if(r.ok) setShows(await r.json() as ShowEntry[]) } catch {}
+    }
+    load()
+  }, [day])
 
-  // Find current show ID
-  const currentShow = shows.find(
-    (s) => s.artista === show_activo
-  );
+  const minsToNext = lastPayload?.minutos_para_headliner
 
   return (
-    <div>
-      <div className="mb-4">
-        <h1 className="text-xl font-bold" style={{ color: "#e2e8f0" }}>
-          Programação
-        </h1>
-        <p className="text-sm" style={{ color: "#94a3b8" }}>
-          Shows por dia — headliners e surge esperado
-        </p>
-      </div>
-
-      {/* Day selector */}
-      <div className="flex gap-2 mb-5 flex-wrap">
-        {FESTIVAL_DAYS.map((day) => (
-          <button
-            key={day}
-            onClick={() => setSelectedDay(day)}
-            className="px-4 py-2 rounded text-sm font-medium transition-colors"
-            style={{
-              backgroundColor:
-                selectedDay === day ? "#4A7C59" : "#1a1f2e",
-              color: selectedDay === day ? "#fff" : "#94a3b8",
-              border: `1px solid ${
-                selectedDay === day ? "#4A7C59" : "#2d3348"
-              }`,
-            }}
-          >
-            {DAY_LABELS[day] ?? day}
-            {day === today && (
-              <span
-                className="ml-1.5 text-xs"
-                style={{ color: selectedDay === day ? "#c5e8cf" : "#6FAF82" }}
-              >
-                hoje
-              </span>
-            )}
+    <div style={{padding:16,maxWidth:700,margin:'0 auto'}}>
+      <h1 style={{marginBottom:8}}>Programa</h1>
+      {minsToNext != null && (
+        <div style={{background:'var(--surface-2)',borderRadius:12,padding:'12px 16px',marginBottom:20,fontSize:16}}>
+          ⏱ Próximo headliner em <strong className="mono">{Math.round(minsToNext)}min</strong>
+        </div>
+      )}
+      <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
+        {DAYS.map(d => (
+          <button key={d.date} onClick={() => setDay(d.date)}
+            style={{padding:'10px 18px',borderRadius:8,border:'none',cursor:'pointer',fontFamily:'DM Sans,sans-serif',
+              fontSize:16,fontWeight:day===d.date?600:400,minHeight:48,
+              background:day===d.date?'var(--green-mid)':'var(--surface-2)',
+              color:day===d.date?'#fff':'var(--text)'}}>
+            {d.label}
           </button>
         ))}
       </div>
-
-      {/* Legend */}
-      <div className="flex gap-4 mb-4 text-xs flex-wrap">
-        <span style={{ color: "#D48B3A" }}>★ Headliner</span>
-        <span style={{ color: "#D48B3A" }}>⚡ Surge +30min</span>
-        <span style={{ color: "#6FAF82" }}>AO VIVO actualmente</span>
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {shows.map((s: ShowEntry) => (
+          <div key={`${s.artista}-${s.inicio}`} className="card"
+            style={{borderLeft:`4px solid ${s.headliner?'var(--gold)':s.activo?'var(--green-bright)':'var(--border)'}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:4}}>
+                  {s.headliner && <span style={{color:'var(--gold)',fontSize:14,fontWeight:700}}>★ HEADLINER</span>}
+                  {s.activo && <span style={{color:'var(--green-bright)',fontSize:13,fontWeight:600}}>▶ A DECORRER</span>}
+                </div>
+                <div style={{fontWeight:700,fontSize:20}}>{s.artista}</div>
+                <div style={{fontSize:14,color:'var(--text-soft)'}}>{s.palco_nome||s.palco}</div>
+              </div>
+              <div className="mono" style={{textAlign:'right',fontSize:16,color:'var(--text-soft)'}}>
+                <div>{s.inicio}</div>
+                <div style={{fontSize:13}}>{s.fim}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {shows.length === 0 && <div style={{textAlign:'center',color:'var(--text-soft)',padding:40}}>Sem shows para este dia</div>}
       </div>
-
-      <Programme shows={shows} currentShowId={currentShow?.id ?? null} />
     </div>
-  );
+  )
 }

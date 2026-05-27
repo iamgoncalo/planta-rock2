@@ -1,250 +1,95 @@
-"use client";
+'use client'
+import { useState } from 'react'
+import { useWS } from '@/context/WSContext'
+import type { Cluster, SectionState } from '@/types/api'
 
-import { useClusters } from "@/hooks/useClusters";
-import { useKPIs } from "@/hooks/useKPIs";
-import { useCurrentShow } from "@/hooks/useCurrentShow";
-import ParqueTejo from "@/components/twin/ParqueTejo";
+// Venue footprint 530×380m, normalized to SVG 530×380 viewBox
+// Cluster positions in metres (approx from lat/lon)
+const clusterPositions: Record<string,{x:number,y:number}> = {
+  'WC-01':{x:420,y:80}, 'WC-02':{x:390,y:120}, 'WC-03':{x:330,y:200},
+  'WC-04':{x:360,y:130}, 'WC-05':{x:340,y:170}, 'WC-06':{x:100,y:310},
+  'WC-07':{x:270,y:270}, 'WC-08':{x:60,y:360},
+}
+
+function occColor(pct: number) {
+  return pct >= 90 ? '#C25A1A' : pct >= 75 ? '#D48B3A' : pct >= 50 ? '#D4A82A' : '#6FAF82'
+}
 
 export default function TwinPage() {
-  const { clusters, loading, error, wsStatus } = useClusters();
-  const { kpis } = useKPIs();
-  const { show_activo, minutos_para_headliner } = useCurrentShow();
+  const { clusters, status, lastPayload } = useWS()
+  const [selected, setSelected] = useState<Cluster | null>(null)
+
+  if (status !== 'live' && clusters.length === 0) {
+    return <div style={{padding:24,color:'var(--text-soft)'}}>Backend indisponível, tente novamente em 5s</div>
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: "#e2e8f0" }}>
-            Digital Twin — Parque Tejo
-          </h1>
-          <p className="text-sm" style={{ color: "#94a3b8" }}>
-            Visão em tempo real de todos os clusters WC
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span
-            style={{
-              backgroundColor:
-                wsStatus === "connected"
-                  ? "#4A7C5922"
-                  : wsStatus === "connecting"
-                    ? "#D48B3A22"
-                    : "#6B728022",
-              color:
-                wsStatus === "connected"
-                  ? "#6FAF82"
-                  : wsStatus === "connecting"
-                    ? "#D48B3A"
-                    : "#6B7280",
-              border: `1px solid ${
-                wsStatus === "connected"
-                  ? "#4A7C59"
-                  : wsStatus === "connecting"
-                    ? "#D48B3A"
-                    : "#6B7280"
-              }`,
-              padding: "2px 8px",
-              borderRadius: 4,
-            }}
-          >
-            WS{" "}
-            {wsStatus === "connected"
-              ? "conectado"
-              : wsStatus === "connecting"
-                ? "a conectar..."
-                : "offline"}
-          </span>
-        </div>
+    <div style={{padding:16,maxWidth:900,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <h1>Digital Twin</h1>
+        <span className="simulado-badge">SIMULADO</span>
       </div>
 
-      {error && (
-        <div
-          className="mb-4 p-3 rounded-lg text-sm"
-          style={{
-            backgroundColor: "#C25A1A22",
-            border: "1px solid #C25A1A44",
-            color: "#C25A1A",
-          }}
-        >
-          Backend offline ou inacessível — {error}
+      {lastPayload?.show_activo && (
+        <div style={{background:'var(--surface-2)',borderRadius:8,padding:'8px 14px',marginBottom:12,fontSize:15}}>
+          ▶ {lastPayload.show_activo}
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Map */}
-        <div className="flex-1">
-          {loading ? (
-            <div
-              style={{
-                backgroundColor: "#1a1f2e",
-                border: "1px solid #2d3348",
-                borderRadius: 12,
-                height: 400,
-              }}
-              className="animate-pulse flex items-center justify-center"
-            >
-              <span style={{ color: "#4b5563" }}>A carregar mapa...</span>
-            </div>
-          ) : (
-            <ParqueTejo clusters={clusters} />
-          )}
-        </div>
+      <div style={{position:'relative',background:'var(--surface-2)',borderRadius:12,overflow:'hidden'}}>
+        <svg viewBox="0 0 530 380" style={{width:'100%',maxHeight:400,display:'block'}}>
+          {/* Venue outline */}
+          <rect x={10} y={10} width={510} height={360} rx={8} fill="none" stroke="var(--border)" strokeWidth={2}/>
+          {/* Stage labels */}
+          <text x={265} y={40} textAnchor="middle" fontSize={12} fill="var(--text-soft)">PALCO MUNDO</text>
+          <rect x={200} y={45} width={130} height={50} rx={4} fill="var(--border)" opacity={0.4}/>
+          <text x={265} y={100} textAnchor="middle" fontSize={10} fill="var(--text-soft)">MUSIC VALLEY</text>
+          <rect x={200} y={150} width={80} height={35} rx={4} fill="var(--border)" opacity={0.3}/>
 
-        {/* Right sidebar */}
-        <div className="w-full lg:w-64 flex flex-col gap-3">
-          {/* Show banner */}
-          <div
-            style={{
-              backgroundColor: "#1a1f2e",
-              border: "1px solid #2d3348",
-              borderRadius: 8,
-              padding: 12,
-            }}
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "#94a3b8" }}>
-              Show Activo
-            </p>
-            {show_activo ? (
-              <>
-                <p className="font-bold" style={{ color: "#6FAF82" }}>
-                  ♪ {show_activo}
-                </p>
-                {minutos_para_headliner !== null && minutos_para_headliner > 0 && (
-                  <p className="text-xs mt-1" style={{ color: "#D48B3A" }}>
-                    Headliner em {minutos_para_headliner} min
-                  </p>
-                )}
-              </>
-            ) : (
-              <p style={{ color: "#4b5563" }} className="text-sm">
-                Sem show activo
-              </p>
-            )}
-          </div>
+          {/* WC cluster dots */}
+          {clusters.map((c: Cluster) => {
+            const pos = clusterPositions[c.cluster_id]
+            if (!pos) return null
+            const secs = c.secoes || {}
+            const vals = Object.values(secs) as SectionState[]
+            const avgOcc = vals.length ? vals.reduce((a: number, s: SectionState) => a + (s.ocupacao_pct||0), 0) / vals.length : 0
+            const r = 12 + avgOcc / 14
+            return (
+              <g key={c.cluster_id} onClick={() => setSelected(selected?.cluster_id === c.cluster_id ? null : c)} style={{cursor:'pointer'}}>
+                <circle cx={pos.x} cy={pos.y} r={r+4} fill={occColor(avgOcc)} opacity={0.15}/>
+                <circle cx={pos.x} cy={pos.y} r={r} fill={occColor(avgOcc)} opacity={0.9}/>
+                <text x={pos.x} y={pos.y+4} textAnchor="middle" fontSize={9} fill="#fff" fontWeight="700">{c.cluster_id.replace('WC-','')}</text>
+              </g>
+            )
+          })}
+        </svg>
 
-          {/* KPI mini */}
-          {kpis && (
-            <div
-              style={{
-                backgroundColor: "#1a1f2e",
-                border: "1px solid #2d3348",
-                borderRadius: 8,
-                padding: 12,
-              }}
-              className="flex flex-col gap-2 text-xs"
-            >
-              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#94a3b8" }}>
-                KPIs Globais
-              </p>
-              <div className="flex justify-between">
-                <span style={{ color: "#94a3b8" }}>Fluxo</span>
-                <span className="font-mono font-bold" style={{ color: "#e2e8f0" }}>
-                  {kpis.kpi_01.toFixed(0)}/100
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: "#94a3b8" }}>Ocupação</span>
-                <span className="font-mono font-bold" style={{ color: "#e2e8f0" }}>
-                  {kpis.kpi_02.toFixed(0)}%
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: "#94a3b8" }}>Alertas</span>
-                <span
-                  className="font-mono font-bold"
-                  style={{
-                    color: kpis.kpi_03 > 0 ? "#C25A1A" : "#6FAF82",
-                  }}
-                >
-                  {kpis.kpi_03}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: "#94a3b8" }}>Redireccionados</span>
-                <span className="font-mono font-bold" style={{ color: "#e2e8f0" }}>
-                  {kpis.kpi_04}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Cluster status list */}
-          <div
-            style={{
-              backgroundColor: "#1a1f2e",
-              border: "1px solid #2d3348",
-              borderRadius: 8,
-              padding: 12,
-            }}
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "#94a3b8" }}>
-              Estado Clusters
-            </p>
-            {clusters.map((c) => {
-              const sections = Object.values(c.secoes).filter(Boolean);
-              const avgOcc =
-                sections.length > 0
-                  ? sections.reduce((s, sec) => s + (sec?.ocupacao_pct ?? 0), 0) /
-                    sections.length
-                  : 0;
-              const worstOrder: Record<string, number> = {
-                critico: 0, cheio: 1, moderado: 2, livre: 3, offline: 4,
-              };
-              const worstStatus =
-                sections.sort(
-                  (a, b) =>
-                    (worstOrder[a?.status ?? "offline"] ?? 5) -
-                    (worstOrder[b?.status ?? "offline"] ?? 5)
-                )[0]?.status ?? "offline";
-
-              const color =
-                worstStatus === "critico"
-                  ? "#C25A1A"
-                  : worstStatus === "cheio" || worstStatus === "moderado"
-                    ? "#D48B3A"
-                    : worstStatus === "livre"
-                      ? "#6FAF82"
-                      : "#6B7280";
-
-              return (
-                <div
-                  key={c.cluster_id}
-                  className="flex items-center justify-between py-1 text-xs"
-                  style={{ borderBottom: "1px solid #1e2330" }}
-                >
-                  <span style={{ color: "#e2e8f0" }}>{c.cluster_id}</span>
-                  <span className="font-mono" style={{ color }}>
-                    {avgOcc.toFixed(0)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        {/* Legend */}
+        <div style={{padding:'8px 12px',display:'flex',gap:16,fontSize:12,color:'var(--text-soft)'}}>
+          {[['#6FAF82','Livre'],['#D4A82A','Moderado'],['#D48B3A','Cheio'],['#C25A1A','Crítico']].map(([c,l])=>(
+            <span key={l} style={{display:'flex',alignItems:'center',gap:4}}>
+              <span style={{width:10,height:10,borderRadius:'50%',background:c,display:'inline-block'}}/>
+              {l}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Bottom show banner */}
-      {show_activo && (
-        <div
-          className="mt-4 p-3 rounded-lg flex items-center gap-3"
-          style={{
-            backgroundColor: "#1e2a1e",
-            border: "1px solid #4A7C59",
-          }}
-        >
-          <span style={{ color: "#6FAF82" }}>♪</span>
-          <div className="flex-1">
-            <span className="text-sm font-semibold" style={{ color: "#6FAF82" }}>
-              {show_activo}
-            </span>
+      {/* Selected cluster drawer */}
+      {selected && (
+        <div className="card" style={{marginTop:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h2>{selected.cluster_id} — {selected.nome}</h2>
+            <button onClick={() => setSelected(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'var(--text-soft)'}}>✕</button>
           </div>
-          {minutos_para_headliner !== null && minutos_para_headliner > 0 && (
-            <span className="text-sm font-mono" style={{ color: "#D48B3A" }}>
-              Headliner em {minutos_para_headliner} min
-            </span>
-          )}
+          {Object.entries(selected.secoes||{}).map(([key, sec]) => (
+            <div key={key} style={{padding:'8px 0',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontSize:16}}>
+              <span style={{fontWeight:500}}>{key === 'U' ? 'Unisex' : key === 'M' ? '♂ Masculino' : '♀ Feminino'}</span>
+              <span className="mono" style={{color:occColor((sec as SectionState).ocupacao_pct)}}>{(sec as SectionState).ocupacao_pct.toFixed(0)}%</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
-  );
+  )
 }

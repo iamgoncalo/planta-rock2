@@ -6,10 +6,12 @@ sensor data, and updates the in-memory cluster state.
 """
 from __future__ import annotations
 
+import json
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.data.clusters import UNISEX_CLUSTER_IDS, MISTO_CLUSTER_IDS
 from app.schemas import ProsegurReading, SectionState
@@ -17,6 +19,12 @@ from app.services.fusion import fuse
 from app.state import app_state
 
 router = APIRouter(tags=["prosegur"])
+
+FORBIDDEN_FIELDS = {
+    "co2", "temperature", "temperatura", "humidity", "humidade",
+    "temp", "hum", "deucalion", "mac", "raw_mac", "face_vector",
+    "person_id", "lat", "lon", "gps",
+}
 
 
 def _validate_section_for_cluster(cluster_id: str, section: str) -> None:
@@ -40,13 +48,34 @@ def _validate_section_for_cluster(cluster_id: str, section: str) -> None:
 
 
 @router.post("/prosegur", status_code=200)
-async def receive_prosegur(reading: ProsegurReading) -> Dict[str, Any]:
+async def receive_prosegur(request: Request) -> Dict[str, Any]:
     """
     Ingest a Prosegur camera ML occupancy reading.
 
     Fuses with existing IR/WiFi data for the same section and
     updates in-memory state immediately.
     """
+    # Read raw body first so we can check for forbidden fields before parsing
+    raw = await request.body()
+    try:
+        payload = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Invalid JSON body")
+
+    body_keys = {k.lower() for k in payload.keys()}
+    forbidden_found: List[str] = sorted(body_keys & FORBIDDEN_FIELDS)
+    if forbidden_found:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Forbidden field in payload", "forbidden_fields": forbidden_found},
+        )
+
+    # Now parse with Pydantic
+    try:
+        reading = ProsegurReading.model_validate(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
     _validate_section_for_cluster(reading.cluster_id, reading.section)
 
     cs = app_state.cluster_states.get(reading.cluster_id)

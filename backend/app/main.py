@@ -34,6 +34,10 @@ from app.routers import (
     simulate,
     websocket as ws_router,
 )
+from app.routers import state as state_router
+from app.routers import sensors_health
+from app.routers import tv as tv_router
+from app.routers import route as route_router
 from app.services.alerts import evaluate_all_clusters
 from app.services.simulation import run_tick
 from app.state import app_state
@@ -185,6 +189,10 @@ def create_app() -> FastAPI:
     app.include_router(cabins.router, prefix=prefix)
     app.include_router(density.router, prefix=prefix)
     app.include_router(maintenance.api_router, prefix=prefix)
+    app.include_router(state_router.router, prefix=prefix)
+    app.include_router(sensors_health.router, prefix=prefix)
+    app.include_router(tv_router.router, prefix=prefix)
+    app.include_router(route_router.router, prefix=prefix)
     app.include_router(ws_router.router, prefix=prefix)
     # /manutencao page (no api/v1 prefix)
     app.include_router(maintenance.router)

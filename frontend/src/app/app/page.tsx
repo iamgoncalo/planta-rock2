@@ -1,304 +1,164 @@
-"use client";
+'use client'
+import { useState, useEffect } from 'react'
+import { useWS } from '@/context/WSContext'
+import type { RouteOption } from '@/types/api'
 
-import { useState, useEffect } from "react";
-import { fetchClusters } from "@/lib/api";
-import { getClusterMeta } from "@/lib/clusters";
-import { getStatusColor } from "@/lib/colors";
-import type { ClusterData } from "@/types";
-
-function getAvgOcc(c: ClusterData): number {
-  const secs = Object.values(c.secoes).filter(Boolean);
-  if (!secs.length) return 0;
-  return secs.reduce((s, sec) => s + (sec?.ocupacao_pct ?? 0), 0) / secs.length;
-}
-
-function getAvgQueue(c: ClusterData): number {
-  const secs = Object.values(c.secoes).filter(Boolean);
-  if (!secs.length) return 0;
-  return secs.reduce((s, sec) => s + (sec?.fila_actual ?? 0), 0);
-}
-
-function getAvgWait(c: ClusterData): number {
-  const secs = Object.values(c.secoes).filter(Boolean);
-  if (!secs.length) return 0;
-  return secs.reduce((s, sec) => s + (sec?.tempo_espera_min ?? 0), 0) / secs.length;
-}
-
-function getWorstStatus(c: ClusterData): string {
-  const order: Record<string, number> = {
-    critico: 0, cheio: 1, moderado: 2, livre: 3, offline: 4,
-  };
-  const secs = Object.values(c.secoes).filter(Boolean);
-  return (
-    secs.sort(
-      (a, b) =>
-        (order[a?.status ?? "offline"] ?? 5) -
-        (order[b?.status ?? "offline"] ?? 5)
-    )[0]?.status ?? "offline"
-  );
-}
+const PREFS = [
+  { key: 'fastest', label: 'Mais rápida', icon: '⚡' },
+  { key: 'least_crowded', label: 'Menos cheia', icon: '🌿' },
+  { key: 'safest', label: 'Mais segura', icon: '🛡' },
+  { key: 'accessible', label: 'Acessível', icon: '♿' },
+]
 
 export default function AppPage() {
-  const [clusters, setClusters] = useState<ClusterData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const { status, clusters } = useWS()
+  const [pref, setPref] = useState('fastest')
+  const [geo, setGeo] = useState<{lat:number,lon:number}|null>(null)
+  const [geoError, setGeoError] = useState<string|null>(null)
+  const [options, setOptions] = useState<RouteOption[]>([])
+  const [loading, setLoading] = useState(false)
+  const offline = status !== 'live'
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await fetchClusters();
-        setClusters(data.clusters);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro de ligação");
-      } finally {
-        setLoading(false);
+  function requestGeo() {
+    if (!navigator.geolocation) { setGeoError('Geolocalização não disponível'); return }
+    navigator.geolocation.getCurrentPosition(
+      p => setGeo({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => {
+        // festival venue center as fallback
+        setGeo({ lat: 38.78111, lon: -9.09310 })
       }
-    }
-    load();
-    const t = setInterval(load, 30000); // refresh every 30s
-    return () => clearInterval(t);
-  }, []);
-
-  // Sort by occupancy ascending, exclude entry_only for suggestions
-  const available = clusters
-    .filter((c) => !c.entry_only)
-    .sort((a, b) => getAvgOcc(a) - getAvgOcc(b));
-
-  const best = available[0];
-  const avoid = clusters.filter((c) => {
-    const s = getWorstStatus(c);
-    return s === "critico" || s === "cheio";
-  });
-
-  if (loading) {
-    return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4"
-        style={{ backgroundColor: "#0f1117", color: "#e2e8f0" }}
-      >
-        <div
-          className="w-10 h-10 rounded-full border-2 animate-spin"
-          style={{ borderColor: "#4A7C59", borderTopColor: "transparent" }}
-        />
-        <p style={{ color: "#94a3b8" }}>A carregar...</p>
-      </div>
-    );
+    )
   }
 
-  if (error) {
-    return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4 px-4"
-        style={{ backgroundColor: "#0f1117", color: "#e2e8f0" }}
-      >
-        <p className="text-4xl">📵</p>
-        <h2 className="text-lg font-bold">Serviço indisponível</h2>
-        <p className="text-sm text-center" style={{ color: "#94a3b8" }}>
-          Não foi possível ligar ao servidor. Tenta novamente em breve.
-        </p>
-      </div>
-    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (geo) fetchRoute() }, [geo, pref, clusters])
+
+  async function fetchRoute() {
+    if (!geo || offline) return
+    setLoading(true)
+    try {
+      const r = await fetch('/api/v1/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: geo.lat, lon: geo.lon, preference: pref })
+      })
+      if (r.ok) {
+        const d = await r.json() as { options?: RouteOption[] }
+        setOptions(d.options || [])
+      }
+    } catch { /* network error */ }
+    setLoading(false)
   }
+
+  const statusColor = status === 'live' ? 'var(--green-mid)' : status === 'reconnecting' ? 'var(--amber)' : 'var(--offline)'
 
   return (
-    <div
-      className="max-w-sm mx-auto py-6 px-4"
-      style={{ color: "#e2e8f0" }}
-    >
-      {/* Header */}
-      <div className="text-center mb-6">
-        <div
-          className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center text-xl font-bold"
-          style={{ backgroundColor: "#4A7C59" }}
-        >
-          WC
+    <div style={{maxWidth:480,margin:'0 auto',padding:'16px 16px 80px'}}>
+      {/* Status + SimBadge */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+        <span style={{fontSize:14,color:'var(--text-soft)'}}>Rock in Rio Lisboa 2026</span>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:99,background:'var(--surface-2)',fontSize:13,fontWeight:500}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:statusColor,display:'inline-block'}}></span>
+            {status === 'live' ? 'LIVE' : status === 'reconnecting' ? 'RECONECTANDO' : 'OFFLINE'}
+          </span>
+          <span className="simulado-badge">SIMULADO</span>
         </div>
-        <h1 className="text-xl font-bold">Encontra a tua casa de banho</h1>
-        <p className="text-sm mt-1" style={{ color: "#94a3b8" }}>
-          Rock in Rio Lisboa 2026
-        </p>
       </div>
 
-      {/* Best recommendation */}
-      {best && (
-        <div
-          className="mb-4 p-4 rounded-xl"
-          style={{
-            backgroundColor: "#1e2a1e",
-            border: "2px solid #4A7C59",
-          }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "#6FAF82" }}>
-            Melhor opção agora
-          </p>
-          <h2 className="text-lg font-bold mb-1" style={{ color: "#e2e8f0" }}>
-            {best.cluster_id}
-          </h2>
-          <p className="text-sm mb-3" style={{ color: "#94a3b8" }}>
-            {best.nome || getClusterMeta(best.cluster_id).nome}
-          </p>
+      <h1 style={{marginBottom:8}}>Encontra a tua WC</h1>
+      <p style={{fontSize:16,color:'var(--text-soft)',marginBottom:24}}>
+        A mais rápida, mais livre, mais próxima — agora.
+      </p>
 
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div
-              className="rounded-lg p-2"
-              style={{ backgroundColor: "#0f1117" }}
-            >
-              <p className="text-lg font-bold font-mono" style={{ color: "#6FAF82" }}>
-                {getAvgOcc(best).toFixed(0)}%
-              </p>
-              <p className="text-xs" style={{ color: "#94a3b8" }}>
-                Ocupação
-              </p>
-            </div>
-            <div
-              className="rounded-lg p-2"
-              style={{ backgroundColor: "#0f1117" }}
-            >
-              <p className="text-lg font-bold font-mono" style={{ color: "#e2e8f0" }}>
-                {getAvgQueue(best)}
-              </p>
-              <p className="text-xs" style={{ color: "#94a3b8" }}>
-                Fila
-              </p>
-            </div>
-            <div
-              className="rounded-lg p-2"
-              style={{ backgroundColor: "#0f1117" }}
-            >
-              <p className="text-lg font-bold font-mono" style={{ color: "#e2e8f0" }}>
-                {best.dist_entrada_m}m
-              </p>
-              <p className="text-xs" style={{ color: "#94a3b8" }}>
-                Distância
-              </p>
-            </div>
-          </div>
-
-          {getAvgWait(best) > 0 && (
-            <p className="text-xs mt-2 text-center" style={{ color: "#94a3b8" }}>
-              Espera estimada: ~{getAvgWait(best).toFixed(0)} min
-            </p>
-          )}
-
-          {/* Type badge - correctly handles unisex */}
-          <div className="mt-3 flex justify-center">
-            <span
-              className="text-xs px-2 py-1 rounded"
-              style={{
-                backgroundColor:
-                  best.tipo === "unissex" ? "#4A7C5922" : "#2d3348",
-                color:
-                  best.tipo === "unissex" ? "#6FAF82" : "#94a3b8",
-              }}
-            >
-              {best.tipo === "unissex" ? "Unissex" : "Masculino + Feminino"}
-            </span>
-          </div>
+      {/* Offline banner */}
+      {offline && (
+        <div style={{background:'#FFF3E0',border:'1px solid var(--amber)',borderRadius:'12px',padding:'12px 16px',marginBottom:24,color:'#7C4000',fontWeight:500}}>
+          Sem dados ao vivo — sistema offline
         </div>
       )}
 
-      {/* Avoid list */}
-      {avoid.length > 0 && (
-        <div
-          className="mb-4 p-3 rounded-xl"
-          style={{
-            backgroundColor: "#1a1510",
-            border: "1px solid #C25A1A44",
-          }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "#C25A1A" }}>
-            Evitar agora
+      {/* Geo permission */}
+      {!geo && !offline && (
+        <div className="card" style={{marginBottom:24,textAlign:'center',padding:32}}>
+          <div style={{fontSize:48,marginBottom:12}}>📍</div>
+          <p style={{fontSize:16,color:'var(--text-soft)',marginBottom:20}}>
+            A Planta Rock in Rio precisa da tua localização para te indicar a WC mais próxima. Não guardamos a tua posição.
           </p>
-          {avoid.map((c) => (
-            <div key={c.cluster_id} className="flex justify-between text-sm py-1">
-              <span style={{ color: "#e2e8f0" }}>
-                {c.cluster_id} — {c.nome}
-              </span>
-              <span style={{ color: "#C25A1A" }}>
-                {getAvgOcc(c).toFixed(0)}% cheio
-              </span>
+          <button className="btn btn-primary" style={{width:'100%'}} onClick={requestGeo}>
+            Permitir localização
+          </button>
+          {geoError && <p style={{color:'var(--critical)',marginTop:8,fontSize:14}}>{geoError}</p>}
+        </div>
+      )}
+
+      {/* Preference chips */}
+      {geo && (
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:24}}>
+          {PREFS.map(p => (
+            <button key={p.key} onClick={() => setPref(p.key)}
+              style={{padding:'10px 16px',borderRadius:99,border:`2px solid ${pref===p.key?'var(--green-mid)':'var(--border)'}`,
+                background:pref===p.key?'var(--green-mid)':'var(--surface)',
+                color:pref===p.key?'#fff':'var(--text)',
+                fontFamily:'DM Sans,sans-serif',fontSize:15,fontWeight:500,cursor:'pointer',
+                minHeight:48,transition:'all 0.15s'}}>
+              {p.icon} {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Loading skeletons */}
+      {loading && (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {[1,2,3].map(i => <div key={i} className="skeleton" style={{height:120,borderRadius:12}} />)}
+        </div>
+      )}
+
+      {/* Route options */}
+      {!loading && options.length > 0 && (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {options.map((opt, i) => (
+            <div key={opt.cluster_id} className="card" style={{
+              border: i===0 ? '2px solid var(--green-mid)' : '1px solid var(--border)',
+              position:'relative', overflow:'hidden'
+            }}>
+              {i===0 && <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:'var(--green-mid)'}} />}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                <div>
+                  {i===0 && <span style={{fontSize:11,fontWeight:700,color:'var(--green-mid)',letterSpacing:'0.08em'}}>MELHOR OPÇÃO</span>}
+                  <h3 style={{fontSize:22,marginTop:i===0?2:0}}>{opt.nome || opt.cluster_id}</h3>
+                </div>
+                <span className="display" style={{fontSize:'clamp(40px,10vw,56px)',color:i===0?'var(--green-mid)':'var(--text)'}}>
+                  {opt.total_cost_min.toFixed(0)}<span style={{fontSize:18}}>min</span>
+                </span>
+              </div>
+              <div style={{display:'flex',gap:16,fontSize:15,color:'var(--text-soft)',marginBottom:12}}>
+                <span>🚶 {opt.walk_time_min.toFixed(1)}min</span>
+                <span>⏳ {opt.queue_wait_min.toFixed(1)}min fila</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:14,color:'var(--text-soft)'}}>{opt.reason}</span>
+                <a href={`/occupation#${opt.cluster_id}`}
+                  style={{display:'inline-flex',alignItems:'center',justifyContent:'center',
+                    minHeight:48,minWidth:80,padding:'0 16px',borderRadius:8,
+                    background:'var(--green-mid)',color:'#fff',fontWeight:600,
+                    textDecoration:'none',fontSize:16}}>
+                  Ir →
+                </a>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* All clusters list */}
-      <div
-        style={{
-          backgroundColor: "#1a1f2e",
-          border: "1px solid #2d3348",
-          borderRadius: 12,
-        }}
-      >
-        <button
-          onClick={() => setShowAll(!showAll)}
-          className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium"
-          style={{ color: "#e2e8f0" }}
-        >
-          <span>Ver todas as casas de banho</span>
-          <span style={{ color: "#94a3b8" }}>{showAll ? "▲" : "▼"}</span>
-        </button>
-
-        {showAll && (
-          <div style={{ borderTop: "1px solid #2d3348" }}>
-            {clusters
-              .sort((a, b) => getAvgOcc(a) - getAvgOcc(b))
-              .map((c, i, arr) => {
-                const occ = getAvgOcc(c);
-                const status = getWorstStatus(c);
-                const colors = getStatusColor(status as Parameters<typeof getStatusColor>[0]);
-                const meta = getClusterMeta(c.cluster_id);
-
-                return (
-                  <div
-                    key={c.cluster_id}
-                    className="px-4 py-3 flex items-center justify-between"
-                    style={{
-                      borderBottom:
-                        i < arr.length - 1 ? "1px solid #1e2330" : "none",
-                    }}
-                  >
-                    <div>
-                      <p className="font-bold text-sm" style={{ color: "#e2e8f0" }}>
-                        {c.cluster_id}
-                      </p>
-                      <p className="text-xs" style={{ color: "#94a3b8" }}>
-                        {c.nome || meta.nome} · {c.dist_entrada_m}m
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: "#94a3b8" }}>
-                        {c.tipo === "unissex" ? "Unissex" : "M + F"}
-                        {c.entry_only && (
-                          <span style={{ color: "#D48B3A" }}>
-                            {" "}
-                            · Só entrada
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className="font-bold font-mono"
-                        style={{ color: colors.bg }}
-                      >
-                        {occ.toFixed(0)}%
-                      </p>
-                      <p className="text-xs" style={{ color: colors.bg }}>
-                        {colors.label}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        )}
-      </div>
-
-      {/* Refresh note */}
-      <p className="text-xs text-center mt-4" style={{ color: "#2d3348" }}>
-        Actualiza automaticamente a cada 30 segundos
-      </p>
+      {/* Empty state */}
+      {!loading && geo && options.length === 0 && !offline && (
+        <div className="card" style={{textAlign:'center',padding:40}}>
+          <div style={{fontSize:40,marginBottom:12}}>🔄</div>
+          <p style={{color:'var(--text-soft)'}}>A carregar dados em tempo real...</p>
+        </div>
+      )}
     </div>
-  );
+  )
 }

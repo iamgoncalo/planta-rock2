@@ -1,5 +1,2 @@
-import { redirect } from "next/navigation";
-
-export default function RootPage() {
-  redirect("/twin");
-}
+import { redirect } from 'next/navigation'
+export default function Root() { redirect('/app') }
